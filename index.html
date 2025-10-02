@@ -2,98 +2,54 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Ensayo</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <title>Prueba Supabase</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 </head>
 <body>
-  <h1>Ensayo con Supabase</h1>
+  <h1>Prueba de concepto Supabase</h1>
 
-  <div id="auth">
-    <h3>Login / Registro</h3>
-    <input type="email" id="email" placeholder="Email">
-    <input type="password" id="password" placeholder="Password">
-    <button onclick="signup()">Registrarse</button>
-    <button onclick="login()">Ingresar</button>
-    <button onclick="logout()">Salir</button>
-  </div>
+  <input id="mensaje" type="text" placeholder="Escribe un mensaje">
+  <button onclick="insertar()">Insertar</button>
+  <button onclick="leer()">Leer</button>
 
-  <div id="app" style="display:none;">
-    <h3>Nuevo mensaje</h3>
-    <input type="text" id="mensajeInput" placeholder="Escribe algo...">
-    <button onclick="guardarMensaje()">Guardar</button>
-
-    <h3>Mensajes guardados</h3>
-    <ul id="listaMensajes"></ul>
-  </div>
+  <ul id="lista"></ul>
 
   <script>
-    // 👉 Cambia esto por tus credenciales
-    const SUPABASE_URL = "https://kbtdpnfrusbsxmedrbbn.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtidGRwbmZydXNic3htZWRyYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc3OTQ4MjksImV4cCI6MjA3MzM3MDgyOX0.iQLKWXCBLzmxVd2pfjoO_9gfAsmyLlPcsDkveNMbwpg";
-    const supabase = supabasejs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Configura tu Supabase
+    const supabaseUrl = "https://kbtdpnfrusbsxmedrbbn.supabase.co";
+    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtidGRwbmZydXNic3htZWRyYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc3OTQ4MjksImV4cCI6MjA3MzM3MDgyOX0.iQLKWXCBLzmxVd2pfjoO_9gfAsmyLlPcsDkveNMbwpg";
+    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-    // Verificar sesión al cargar
-    checkSession();
-
-    async function checkSession() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        document.getElementById("auth").style.display = "none";
-        document.getElementById("app").style.display = "block";
-        cargarMensajes();
+    async function insertar() {
+      const valor = document.getElementById("mensaje").value;
+      const { data, error } = await supabase
+        .from("mensajes")
+        .insert([{ contenido: valor }]);
+      if (error) {
+        console.error(error);
+        alert("Error insertando");
+      } else {
+        alert("Insertado!");
       }
     }
 
-    async function signup() {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) alert("Error: " + error.message);
-      else alert("Usuario registrado. Revisa tu email para confirmar.");
-    }
+    async function leer() {
+      const { data, error } = await supabase
+        .from("mensajes")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    async function login() {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert("Error: " + error.message);
-      else checkSession();
-    }
-
-    async function logout() {
-      await supabase.auth.signOut();
-      document.getElementById("auth").style.display = "block";
-      document.getElementById("app").style.display = "none";
-    }
-
-    async function cargarMensajes() {
-      let { data, error } = await supabase
-        .from('mensajes')
-        .select('*')
-        .order('fecha', { ascending: false });
-
-      if (error) console.error(error);
-      else {
-        const lista = document.getElementById("listaMensajes");
+      if (error) {
+        console.error(error);
+        alert("Error leyendo");
+      } else {
+        const lista = document.getElementById("lista");
         lista.innerHTML = "";
-        data.forEach(m => {
-          let li = document.createElement("li");
-          li.textContent = `${m.fecha} => ${m.texto}`;
+        data.forEach(item => {
+          const li = document.createElement("li");
+          li.textContent = item.contenido + " (" + item.created_at + ")";
           lista.appendChild(li);
         });
-      }
-    }
-
-    async function guardarMensaje() {
-      const texto = document.getElementById("mensajeInput").value;
-      if (!texto) return;
-      let { error } = await supabase
-        .from('mensajes')
-        .insert([{ texto }]);
-      if (error) console.error(error);
-      else {
-        document.getElementById("mensajeInput").value = "";
-        cargarMensajes();
       }
     }
   </script>
