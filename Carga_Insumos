@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>PoC - Carga de Insumos</title>
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+  // ========================
+  // Configuración Supabase
+  // ========================
+  const supabaseUrl = 'https://kbtdpnfrusbsxmedrbbn.supabase.co';
+  const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtidGRwbmZydXNic3htZWRyYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc3OTQ4MjksImV4cCI6MjA3MzM3MDgyOX0.iQLKWXCBLzmxVd2pfjoO_9gfAsmyLlPcsDkveNMbwpg';
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // ========================
+  // Funciones de carga
+  // ========================
+
+  // Obtener tipos de insumo y medidas para los select
+  async function cargarOpciones() {
+    const { data: tiposInsumo } = await supabase.from('tipo_insumo').select('*');
+    const { data: tiposMedida } = await supabase.from('tipo_medida').select('*');
+
+    const tipoInsumoSelect = document.getElementById('tipo_insumo');
+    tiposInsumo.forEach(t => {
+      const option = document.createElement('option');
+      option.value = t.id;
+      option.text = t.nombre;
+      tipoInsumoSelect.appendChild(option);
+    });
+
+    const tipoMedidaSelect = document.getElementById('tipo_medida');
+    tiposMedida.forEach(t => {
+      const option = document.createElement('option');
+      option.value = t.unidad_base;
+      option.text = t.nombre + ' (' + t.unidad_base + ')';
+      tipoMedidaSelect.appendChild(option);
+    });
+  }
+
+  // Función de conversión simple a unidad base
+  function convertirACantidadBase(unidadBase, cantidad, unidadIngresada) {
+    const factores = {
+      'kg-g': 1000,
+      'g-g': 1,
+      'l-ml': 1000,
+      'ml-ml': 1,
+      'm-m': 1,
+      'u-u': 1
+    };
+    const key = `${unidadIngresada}-${unidadBase}`;
+    return cantidad * (factores[key] || 1);
+  }
+
+  // Agregar insumo
+  async function agregarInsumo() {
+    const nombre = document.getElementById('nombre').value.trim();
+    const tipo_insumo_id = parseInt(document.getElementById('tipo_insumo').value);
+    const unidad_base = document.getElementById('tipo_medida').value;
+    const cantidad_ingresada = parseFloat(document.getElementById('cantidad').value);
+    const unidad_ingresada = document.getElementById('unidad_ingresada').value;
+    const costo_compra = parseFloat(document.getElementById('costo').value);
+
+    if (!nombre || !cantidad_ingresada || !costo_compra) {
+      alert('Por favor completa todos los campos');
+      return;
+    }
+
+    const cantidad_base = convertirACantidadBase(unidad_base, cantidad_ingresada, unidad_ingresada);
+
+    const { data, error } = await supabase
+      .from('insumos')
+      .insert([{ nombre, tipo_insumo_id, unidad_base, cantidad_base, costo_compra }]);
+
+    const log = document.getElementById('log');
+    if (error) {
+      log.innerText += 'Error al agregar: ' + error.message + '\n';
+    } else {
+      log.innerText += `Insumo agregado: ${nombre} (${cantidad_base} ${unidad_base})\n`;
+    }
+  }
+
+  // Consultar insumos
+  async function consultarInsumos() {
+    const { data, error } = await supabase.from('insumos').select('*');
+    const log = document.getElementById('log');
+    if (error) {
+      log.innerText += 'Error al consultar: ' + error.message + '\n';
+    } else {
+      log.innerText += '=== Insumos cargados ===\n';
+      data.forEach(i => {
+        log.innerText += `${i.nombre} | ${i.cantidad_base} ${i.unidad_base} | Costo: ${i.costo_compra}\n`;
+      });
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', cargarOpciones);
+  window.agregarInsumo = agregarInsumo;
+  window.consultarInsumos = consultarInsumos;
+
+</script>
+</head>
+<body>
+  <h1>PoC - Carga de Insumos</h1>
+
+  <label>Nombre del insumo:</label><br>
+  <input type="text" id="nombre"><br><br>
+
+  <label>Tipo de insumo:</label><br>
+  <select id="tipo_insumo"></select><br><br>
+
+  <label>Tipo de medida (unidad base):</label><br>
+  <select id="tipo_medida"></select><br><br>
+
+  <label>Cantidad:</label><br>
+  <input type="number" id="cantidad" step="any"><br><br>
+
+  <label>Unidad de la cantidad ingresada:</label><br>
+  <select id="unidad_ingresada">
+    <option value="g">g</option>
+    <option value="kg">kg</option>
+    <option value="ml">ml</option>
+    <option value="l">l</option>
+    <option value="m">m</option>
+    <option value="u">u</option>
+  </select><br><br>
+
+  <label>Costo de esa cantidad:</label><br>
+  <input type="number" id="costo" step="any"><br><br>
+
+  <button onclick="agregarInsumo()">Agregar</button>
+  <button onclick="consultarInsumos()">Consultar</button>
+
+  <h3>Log:</h3>
+  <pre id="log" style="background:#f0f0f0; padding:10px; max-height:300px; overflow:auto;"></pre>
+</body>
+</html>
