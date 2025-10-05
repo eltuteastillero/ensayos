@@ -1,24 +1,22 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>PoC Supabase — Debug</title>
-  <!-- UMD build correcto -->
+  <title>PoC Supabase — Debug Leer</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.min.js"></script>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;padding:20px}
-    #debug{white-space:pre-wrap;background:#f4f4f4;padding:10px;border:1px solid #ddd;margin-top:10px}
-    input{padding:6px;margin-right:6px}
-    button{padding:6px 10px}
+    body{font-family:Arial,sans-serif;padding:18px}
+    #debug{white-space:pre-wrap;background:#f6f6f6;border:1px solid #ddd;padding:10px;margin-top:10px;height:220px;overflow:auto}
+    input,button{padding:8px;margin:6px 4px}
   </style>
 </head>
 <body>
-  <h2>Prueba Supabase — PoC</h2>
+  <h2>PoC Supabase — Debug Leer</h2>
 
   <div>
     <input id="mensaje" placeholder="Escribe algo..." />
     <button id="btnInsert">Insertar</button>
-    <button id="btnLeer">Leer</button>
+    <button id="btnLeer" type="button">Leer</button>
   </div>
 
   <h3>Lista</h3>
@@ -29,67 +27,119 @@
 
   <script>
     // --- <<< REEMPLAZA ESTO >>> ---
-    const SUPABASE_URL = "https://kbtdpnfrusbsxmedrbbn.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtidGRwbmZydXNic3htZWRyYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc3OTQ4MjksImV4cCI6MjA3MzM3MDgyOX0.iQLKWXCBLzmxVd2pfjoO_9gfAsmyLlPcsDkveNMbwpg";
+    const SUPABASE_URL = "TU_SUPABASE_URL";
+    const SUPABASE_ANON_KEY = "TU_SUPABASE_ANON_KEY";
     // --------------------------------
 
     function dbg(msg){
       console.log(msg);
       const el = document.getElementById('debug');
-      el.textContent = new Date().toLocaleTimeString() + ' — ' + msg + "\n" + el.textContent;
+      el.textContent = new Date().toLocaleTimeString() + ' — ' + msg + '\n' + el.textContent;
     }
 
-    // Verificamos que la librería UMD cargó
     if (!window.supabase || !supabase.createClient) {
-      dbg('ERROR: la librería de Supabase NO cargó correctamente. Revisa el script src.');
+      dbg('ERROR: la librería de Supabase NO cargó. Revisa el script src.');
     }
 
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // Insert
     document.getElementById('btnInsert').addEventListener('click', async () => {
-      const valor = document.getElementById('mensaje').value.trim();
-      if (!valor) { dbg('No hay texto para insertar'); return; }
-      dbg('Intentando insertar: ' + valor);
+      const v = document.getElementById('mensaje').value.trim();
+      if (!v) { dbg('No hay texto para insertar'); return; }
+      dbg('Intentando INSERT: ' + v);
       try {
         const res = await supabaseClient
           .from('mensajes')
-          .insert([{ contenido: valor }]);
+          .insert([{ contenido: v }])
+          .select(); // pedimos que devuelva los datos insertados
         if (res.error) throw res.error;
-        dbg('Insert OK: ' + JSON.stringify(res.data));
-        leer(); // recarga lista
+        dbg('Insert OK (supabase-js). rows: ' + (res.data ? res.data.length : 0));
+        dbg('Insert response: ' + JSON.stringify(res.data));
       } catch (err) {
         dbg('Error insertando: ' + (err.message || JSON.stringify(err)));
         console.error(err);
       }
     });
 
+    // Leer — con doble comprobacion: supabase-js + REST direct (cache: no-store)
     async function leer() {
-      dbg('Solicitando datos (select)...');
+      dbg('leer() llamado — ejecutando select con supabase-js...');
       try {
         const res = await supabaseClient
           .from('mensajes')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(100);
-        if (res.error) throw res.error;
-        dbg('Select OK, registros: ' + (res.data ? res.data.length : 0));
-        const lista = document.getElementById('lista');
-        lista.innerHTML = '';
-        (res.data || []).forEach(row => {
-          const li = document.createElement('li');
-          li.textContent = `${row.created_at} — ${row.contenido}`;
-          lista.appendChild(li);
+          .limit(200);
+
+        if (res.error) {
+          dbg('supabase-js select ERROR: ' + (res.error.message || JSON.stringify(res.error)));
+        } else {
+          dbg('supabase-js select OK — filas: ' + (res.data ? res.data.length : 0));
+          renderLista(res.data || []);
+        }
+      } catch (e) {
+        dbg('supabase-js select excepción: ' + e.message);
+        console.error(e);
+      }
+
+      // --- Prueba directa al REST para descartar caching o problema con la lib ---
+      try {
+        dbg('Haciendo fetch directo al REST endpoint para comparar (no-store)...');
+        const restUrl = `${SUPABASE_URL}/rest/v1/mensajes?select=*&order=created_at.desc&limit=200`;
+        const resp = await fetch(restUrl, {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+            Prefer: 'return=representation'
+          },
+          cache: 'no-store'
         });
-      } catch (err) {
-        dbg('Error leyendo: ' + (err.message || JSON.stringify(err)));
-        console.error(err);
+        const json = await resp.json();
+        dbg(`REST fetch status=${resp.status} — filas=${Array.isArray(json)?json.length:'?'} `);
+        console.log('REST fetch raw ->', json);
+        // opcional: si supabase-js no devolvió nada, renderizo con REST
+        if (!resp.ok) {
+          dbg('REST fetch no OK: ' + resp.status + ' ' + resp.statusText);
+        } else if ((json || []).length > 0) {
+          // Si supabase-js no mostró filas pero REST sí, lo usamos
+          // (esto es solo para debug/comparación)
+          dbg('REST devuelve datos. (si son más nuevos, fijate las timestamps)');
+        }
+      } catch (e) {
+        dbg('REST fetch error: ' + e.message);
+        console.error(e);
       }
     }
 
-    window.leer = leer; // expongo para poder llamar desde consola si hace falta
+    function renderLista(data) {
+      const lista = document.getElementById('lista');
+      lista.innerHTML = '';
+      (data || []).forEach(row => {
+        const li = document.createElement('li');
+        li.textContent = `${row.created_at} — ${row.contenido}`;
+        lista.appendChild(li);
+      });
+    }
 
-    // carga inicial (intenta leer, pero ignora errores)
-    setTimeout(() => { leer(); }, 600);
+    // expongo para consola
+    window.leer = leer;
+
+    // Listener del botón (por si preferís este attach)
+    document.getElementById('btnLeer').addEventListener('click', () => {
+      dbg('Click Leer -> llamando leer()...');
+      leer();
+    });
+
+    // Auto-lectura al volver a pestaña (útil para tu caso cross-tab)
+    window.addEventListener('focus', () => {
+      dbg('Pestaña tuvo focus — voy a refrescar datos (leer())');
+      leer();
+    });
+
+    // llamada inicial
+    setTimeout(() => { leer(); }, 500);
+
   </script>
 </body>
 </html>
