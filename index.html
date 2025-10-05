@@ -1,57 +1,95 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Prueba Supabase</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <meta charset="utf-8" />
+  <title>PoC Supabase — Debug</title>
+  <!-- UMD build correcto -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.min.js"></script>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;padding:20px}
+    #debug{white-space:pre-wrap;background:#f4f4f4;padding:10px;border:1px solid #ddd;margin-top:10px}
+    input{padding:6px;margin-right:6px}
+    button{padding:6px 10px}
+  </style>
 </head>
 <body>
-  <h1>Prueba de concepto Supabase</h1>
+  <h2>Prueba Supabase — PoC</h2>
 
-  <input id="mensaje" type="text" placeholder="Escribe un mensaje">
-  <button onclick="insertar()">Insertar</button>
-  <button onclick="leer()">Leer</button>
+  <div>
+    <input id="mensaje" placeholder="Escribe algo..." />
+    <button id="btnInsert">Insertar</button>
+    <button id="btnLeer">Leer</button>
+  </div>
 
+  <h3>Lista</h3>
   <ul id="lista"></ul>
 
-  <script>
-    // Configura tu Supabase
-    const supabaseUrl = "https://kbtdpnfrusbsxmedrbbn.supabase.co";
-    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtidGRwbmZydXNic3htZWRyYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc3OTQ4MjksImV4cCI6MjA3MzM3MDgyOX0.iQLKWXCBLzmxVd2pfjoO_9gfAsmyLlPcsDkveNMbwpg";
-    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+  <h3>Debug</h3>
+  <div id="debug">Mensajes de debug aparecerán aquí...</div>
 
-    async function insertar() {
-      const valor = document.getElementById("mensaje").value;
-      const { data, error } = await supabase
-        .from("mensajes")
-        .insert([{ contenido: valor }]);
-      if (error) {
-        console.error(error);
-        alert("Error insertando");
-      } else {
-        alert("Insertado!");
-      }
+  <script>
+    // --- <<< REEMPLAZA ESTO >>> ---
+    const SUPABASE_URL = "https://kbtdpnfrusbsxmedrbbn.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtidGRwbmZydXNic3htZWRyYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc3OTQ4MjksImV4cCI6MjA3MzM3MDgyOX0.iQLKWXCBLzmxVd2pfjoO_9gfAsmyLlPcsDkveNMbwpg";
+    // --------------------------------
+
+    function dbg(msg){
+      console.log(msg);
+      const el = document.getElementById('debug');
+      el.textContent = new Date().toLocaleTimeString() + ' — ' + msg + "\n" + el.textContent;
     }
+
+    // Verificamos que la librería UMD cargó
+    if (!window.supabase || !supabase.createClient) {
+      dbg('ERROR: la librería de Supabase NO cargó correctamente. Revisa el script src.');
+    }
+
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    document.getElementById('btnInsert').addEventListener('click', async () => {
+      const valor = document.getElementById('mensaje').value.trim();
+      if (!valor) { dbg('No hay texto para insertar'); return; }
+      dbg('Intentando insertar: ' + valor);
+      try {
+        const res = await supabaseClient
+          .from('mensajes')
+          .insert([{ contenido: valor }]);
+        if (res.error) throw res.error;
+        dbg('Insert OK: ' + JSON.stringify(res.data));
+        leer(); // recarga lista
+      } catch (err) {
+        dbg('Error insertando: ' + (err.message || JSON.stringify(err)));
+        console.error(err);
+      }
+    });
 
     async function leer() {
-      const { data, error } = await supabase
-        .from("mensajes")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error(error);
-        alert("Error leyendo");
-      } else {
-        const lista = document.getElementById("lista");
-        lista.innerHTML = "";
-        data.forEach(item => {
-          const li = document.createElement("li");
-          li.textContent = item.contenido + " (" + item.created_at + ")";
+      dbg('Solicitando datos (select)...');
+      try {
+        const res = await supabaseClient
+          .from('mensajes')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100);
+        if (res.error) throw res.error;
+        dbg('Select OK, registros: ' + (res.data ? res.data.length : 0));
+        const lista = document.getElementById('lista');
+        lista.innerHTML = '';
+        (res.data || []).forEach(row => {
+          const li = document.createElement('li');
+          li.textContent = `${row.created_at} — ${row.contenido}`;
           lista.appendChild(li);
         });
+      } catch (err) {
+        dbg('Error leyendo: ' + (err.message || JSON.stringify(err)));
+        console.error(err);
       }
     }
+
+    window.leer = leer; // expongo para poder llamar desde consola si hace falta
+
+    // carga inicial (intenta leer, pero ignora errores)
+    setTimeout(() => { leer(); }, 600);
   </script>
 </body>
 </html>
